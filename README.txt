@@ -17,3 +17,11 @@ It combines human-centered AI, emotion understanding, and visual style guidance 
 
 ## Status
 MVP — actively evolving.
+
+## Architecture
+
+Sensea is composed of two main components:
+
+- **Sensea Android App** (this repository)
+- **Sensea Backend API** — emotion understanding & style intelligence  
+  👉 https://github.com/AlimertYasar/sensea-backend
