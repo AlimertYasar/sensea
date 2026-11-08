@@ -1,0 +1,83 @@
+{
+  "expo": {
+    "name": "Sensea",
+    "slug": "sensea",
+    "version": "2.2.0",
+    "orientation": "portrait",
+    "icon": "./assets/images/icon.png",
+    "scheme": "sensea",
+    "userInterfaceStyle": "automatic",
+    "backgroundColor": "#191022",
+    "ios": {
+      "bundleIdentifier": "com.alimertyasar.sensea",
+      "buildNumber": "1",
+      "supportsTablet": false,
+      "infoPlist": {
+        "NSLocationWhenInUseUsageDescription": "Sensea uses your approximate location only to check the local weather for outfit suggestions.",
+        "ITSAppUsesNonExemptEncryption": false,
+        "NSCameraUsageDescription": "Sensea uses the camera so you can photograph clothes for your wardrobe.",
+        "NSPhotoLibraryUsageDescription": "Sensea lets you choose photos of your clothes to add to your wardrobe."
+      }
+    },
+    "android": {
+      "package": "com.alimertyasar.sensea",
+      "versionCode": 1,
+      "adaptiveIcon": {
+        "backgroundColor": "#191022",
+        "foregroundImage": "./assets/images/android-icon-foreground.png",
+        "monochromeImage": "./assets/images/android-icon-monochrome.png"
+      },
+      "permissions": [
+        "ACCESS_COARSE_LOCATION",
+        "CAMERA"
+      ],
+      "blockedPermissions": [
+        "ACCESS_FINE_LOCATION",
+        "ACCESS_BACKGROUND_LOCATION"
+      ],
+      "predictiveBackGestureEnabled": false
+    },
+    "web": {
+      "output": "single",
+      "favicon": "./assets/images/favicon.png"
+    },
+    "plugins": [
+      "expo-router",
+      "expo-localization",
+      [
+        "expo-location",
+        {
+          "locationWhenInUsePermission": "Sensea uses your approximate location only to check the local weather for outfit suggestions."
+        }
+      ],
+      [
+        "expo-image-picker",
+        {
+          "photosPermission": "Sensea lets you choose photos of your clothes to add to your wardrobe.",
+          "cameraPermission": "Sensea uses the camera so you can photograph clothes for your wardrobe."
+        }
+      ],
+      [
+        "expo-splash-screen",
+        {
+          "backgroundColor": "#191022",
+          "image": "./assets/images/splash-icon.png",
+          "imageWidth": 120
+        }
+      ],
+      "expo-sharing",
+      "@sentry/react-native",
+      [
+        "expo-notifications",
+        {
+          "color": "#7F13EC",
+          "icon": "./assets/images/android-icon-monochrome.png"
+        }
+      ]
+    ],
+    "experiments": {
+      "typedRoutes": true,
+      "reactCompiler": true
+    }
+  }
+}

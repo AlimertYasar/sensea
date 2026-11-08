@@ -1,15 +1,9 @@
-*.iml
-.gradle
-/local.properties
-/.idea/caches
-/.idea/libraries
-/.idea/modules.xml
-/.idea/workspace.xml
-/.idea/navEditor.xml
-/.idea/assetWizardSettings.xml
+# Secrets: keys live in .env files / environment variables, never in git
+.env
+.env.*
+!.env.example
+*.db
 .DS_Store
-/build
-/captures
-.externalNativeBuild
-.cxx
-local.properties
+Thumbs.db
+.idea/
+.vscode/

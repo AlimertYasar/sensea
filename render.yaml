@@ -1,0 +1,29 @@
+services:
+  - type: web
+    name: sensea-api
+    runtime: docker
+    rootDir: backend         # monorepo: the API lives in /backend
+    dockerfilePath: ./Dockerfile
+    dockerContext: .
+    buildFilter:
+      paths:
+        - backend/**     # changes to the mobile app don't redeploy the API
+    plan: starter            # persistent disk needs a paid plan; free works but quotas reset on deploy
+    healthCheckPath: /health
+    disk:
+      name: data
+      mountPath: /data
+      sizeGB: 1
+    envVars:
+      - key: ANTHROPIC_API_KEY
+        sync: false
+      - key: FAL_KEY
+        sync: false
+      - key: REVENUECAT_SECRET_KEY
+        sync: false
+      - key: SENSEA_CONTACT_EMAIL
+        sync: false
+      - key: SENSEA_DB
+        value: /data/sensea_usage.db
+      - key: SENSEA_APP_KEY
+        generateValue: true
