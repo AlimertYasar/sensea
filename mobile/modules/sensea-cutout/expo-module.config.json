@@ -1,0 +1,5 @@
+{
+  "platforms": ["apple", "android"],
+  "apple": { "modules": ["SenseaCutoutModule"] },
+  "android": { "modules": ["expo.modules.senseacutout.SenseaCutoutModule"] }
+}

@@ -122,8 +122,9 @@ export interface TagResult {
   cutout?: string | null; // PNG data URI with the background removed
 }
 
-export const tagGarment = (image_b64: string, locale: Locale, installId: string) =>
-  call<TagResult>('/v1/wardrobe/tag', installId, { image_b64, locale }, 60000);
+/** `removeBg: false` when the phone already cut the piece out, so the server doesn't pay for it again. */
+export const tagGarment = (image_b64: string, locale: Locale, installId: string, removeBg = true) =>
+  call<TagResult>('/v1/wardrobe/tag', installId, { image_b64, locale, remove_bg: removeBg }, 60000);
 
 export interface SwapInput {
   outfit: Outfit;

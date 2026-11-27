@@ -167,6 +167,7 @@ class RenderResponse(BaseModel):
 class TagRequest(BaseModel):
     image_b64: str = Field(min_length=100, max_length=700_000)
     locale: Locale = "tr"
+    remove_bg: bool = True  # False when the phone already cut the piece out on-device
 
 
 class TagResponse(BaseModel):

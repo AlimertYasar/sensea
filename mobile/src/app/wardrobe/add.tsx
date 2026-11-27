@@ -15,6 +15,7 @@ import { track } from '@/lib/monitoring';
 import { newId, useStore } from '@/lib/store';
 import { F, R, S, makeStyles, useColors } from '@/lib/theme';
 import type { Warmth } from '@/lib/types';
+import { cutoutAvailable, removeBackgroundOnDevice } from '../../../modules/sensea-cutout';
 
 const PRESETS: [string, string][] = [
   ['black', '#1C1C1E'], ['white', '#F5F5F2'], ['grey', '#9A9AA0'], ['navy', '#1F2A44'], ['beige', '#D8C7A8'],
@@ -63,14 +64,17 @@ export default function AddPiece() {
     try {
       const small = await resizeToBase64(res.assets[0].uri, 768, 0.8);
       setPhoto(small);
-      const tag = await tagGarment(small.base64, locale, installId);
+      // Cut the background out on the phone when it can (free, offline, usually under a second).
+      // Only if that isn't possible (old iPhone, Expo Go, model still downloading) does the server do it.
+      const local = cutoutAvailable() ? await removeBackgroundOnDevice(small.uri) : null;
+      const tag = await tagGarment(small.base64, locale, installId, !local);
       setType(tag.type);
       setName(tag.name);
       setColor({ hex: tag.color_hex, name: tag.color_name });
       setDetected({ hex: tag.color_hex, name: tag.color_name });
       setWarmth(tag.warmth);
       setReview(tag.needs_review);
-      setCutout(tag.cutout ?? null);
+      setCutout(local ?? tag.cutout ?? null);
     } catch (e) {
       const code = e instanceof ApiError ? e.code : 'server';
       setError(code === 'not_garment' ? t.errNotGarment : code === 'network' ? t.errNetwork : code === 'quota' ? t.errQuota : t.errGeneric);

@@ -21,7 +21,8 @@ from .schemas import Outfit, RenderRef, TagResponse
 FAL_KEY = os.getenv("FAL_KEY", "")
 FAL_MODEL = os.getenv("SENSEA_IMAGE_MODEL", "fal-ai/flux-2-pro")
 FAL_EDIT_MODEL = os.getenv("SENSEA_IMAGE_EDIT_MODEL", "fal-ai/flux-2-pro/edit")
-FAL_BG_MODEL = os.getenv("SENSEA_BG_MODEL", "fal-ai/birefnet/v2")
+# Fallback only: the app removes backgrounds on the phone when it can. FeyNobg costs about $0.001 per image.
+FAL_BG_MODEL = os.getenv("SENSEA_BG_MODEL", "fal-ai/feynobg")
 
 # Settings carried over from the original Sensea image prompts, softened where needed.
 SCENES = {
@@ -123,12 +124,13 @@ async def remove_background(image_b64: str) -> str | None:
     if not FAL_KEY:
         return None
     uri = image_b64 if image_b64.startswith("data:") else f"data:image/jpeg;base64,{image_b64}"
+    body: dict = {"image_url": uri, "sync_mode": True}  # sync_mode: inline result, nothing kept on fal
+    if "birefnet" in FAL_BG_MODEL:  # BiRefNet-only options
+        body.update(output_format="png", refine_foreground=True)
     try:
         async with httpx.AsyncClient(timeout=60) as client:
             r = await client.post(
-                f"https://fal.run/{FAL_BG_MODEL}",
-                json={"image_url": uri, "output_format": "png", "sync_mode": True, "refine_foreground": True},
-                headers={"Authorization": f"Key {FAL_KEY}"},
+                f"https://fal.run/{FAL_BG_MODEL}", json=body, headers={"Authorization": f"Key {FAL_KEY}"},
             )
             r.raise_for_status()
             url = r.json()["image"]["url"]

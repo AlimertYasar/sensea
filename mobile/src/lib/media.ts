@@ -27,8 +27,21 @@ export function saveJpeg(folder: 'wardrobe' | 'renders', id: string, base64: str
   return f.uri;
 }
 
-/** Same for a PNG with transparency (background-removed wardrobe pieces). */
+/**
+ * Same for a PNG with transparency (background-removed wardrobe pieces).
+ * `data` is base64 / a data URI (cut out on the server) or a file:// URI (cut out on the device).
+ */
 export function savePng(folder: 'wardrobe', id: string, data: string): string {
+  if (!isWeb && data.startsWith('file:')) {
+    const dest = new File(dir(folder), `${id}-cut.png`);
+    if (dest.exists) dest.delete();
+    const src = new File(data);
+    src.copy(dest);
+    try {
+      src.delete(); // temporary file from the cutout module
+    } catch {}
+    return dest.uri;
+  }
   const clean = data.startsWith('data:') ? data.split(',', 2)[1] : data;
   if (isWeb) return `data:image/png;base64,${clean}`;
   const f = new File(dir(folder), `${id}-cut.png`);

@@ -18,7 +18,8 @@ Nasıl hissettiğini yazarsın; Sensea bunu bir duygu karışımına, bir renk h
 - **Premium:** Kombinin gerçekçi AI fotoğrafı (ayda 30) ve sınırsız öneri.
 - **Premium Plus:**
   - Gardırop sekmesinde kıyafetlerini fotoğraflarsın; Sensea tür ve rengini tanır.
-  - Fotoğrafın arka planı otomatik temizlenir (fal.ai BiRefNet); parça flat-lay'de çizimler gibi tahtaya yerleşir.
+  - Fotoğrafın arka planı otomatik temizlenir: önce telefonda, ücretsiz ve çevrimdışı (iOS 17+ Apple Vision, Android ML Kit; `modules/sensea-cutout`), olmazsa sunucuda (fal.ai FeyNobg, görsel başına ~0,001 $). Parça flat-lay'de çizimler gibi tahtaya yerleşir.
+    Telefonda temizleme native kod olduğu için **Expo Go'da çalışmaz**; development build gerekir (bkz. YAYIN_REHBERI.md). Expo Go'da sunucu yedeği devreye girer.
   - Kombinler senin parçalarından kurulur; uzun süredir giymediklerin öne çıkar, son 2 günde giydiklerin geri planda kalır.
   - Her parçanın kaç kez giyildiği görünür, "Bir süredir giymediklerin" satırı ve "Bununla kombin oluştur" butonu o parçayı içeren iki kombin hazırlar.
   - AI fotoğraflar kendi kıyafetlerinle üretilir (ayda 100).
