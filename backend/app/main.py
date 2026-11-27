@@ -232,6 +232,10 @@ async def render(req: RenderRequest, request: Request, x_sensea_key: str | None 
     return RenderResponse(image=image, provider=provider, remaining=usage().left(user, "render_month", limit))
 
 
+async def _none() -> None:
+    return None
+
+
 @app.post("/v1/wardrobe/tag", response_model=TagResponse)
 async def tag(req: TagRequest, request: Request, x_sensea_key: str | None = Header(default=None),
               x_install_id: str | None = Header(default=None), x_dev_tier: str | None = Header(default=None)):
@@ -241,7 +245,7 @@ async def tag(req: TagRequest, request: Request, x_sensea_key: str | None = Head
     if not usage().take(user, "tag_month", LIMITS[tier]["tag_month"]):
         raise HTTPException(status_code=429, detail="TAG_LIMIT")
     # Background removal runs alongside tagging and is kept even if the AI tagger fails.
-    cut_task = asyncio.create_task(images.remove_background(req.image_b64))
+    cut_task = asyncio.create_task(images.remove_background(req.image_b64) if req.remove_bg else _none())
     res: TagResponse | None = None
     if llm_enabled():
         try:
@@ -301,7 +305,7 @@ PRIVACY_HTML = """<!doctype html><html lang="tr"><head><meta charset="utf-8"><me
 <p>Sensea hesap oluşturmanı istemez. Adın, stil tercihin ve duygu günlüğün yalnızca cihazında saklanır.</p>
 <h2>İşlenen veriler</h2><p>Kombin önerisi için yazdığın metin, stil/kesim/etkinlik tercihlerin ve (izin verdiysen) sıcaklık ile hava tipi sunucumuza gönderilir. Premium Plus'ta gardırop parçalarının adı, türü ve rengi de gönderilir. Metin, öneriyi üretmek için Anthropic'in Claude API'si ile işlenir; sunucumuzda saklanmaz ve kayıt altına alınmaz. Kötüye kullanımı önlemek için cihazına özel rastgele bir kimlik ve IP adresi geçici olarak (en fazla 1 saat, yalnızca bellekte) kullanılır.</p>
 <h2>Hatırlatmalar</h2><p>Sabah hatırlatması ve haftalık özet bildirimleri yalnızca telefonunda planlanır; sunucumuz üzerinden geçmez.</p>
-<h2>Premium özellikler</h2><p>Gerçekçi görsel oluşturduğunda kombin açıklaması (ve Premium Plus'ta seçtiğin gardırop fotoğrafları) görseli üretmek için fal.ai'ye gönderilir; görsel doğrudan cihazına döner ve bizde saklanmaz. Gardıroba fotoğraf eklediğinde fotoğraf, türünü ve rengini belirlemek için Anthropic'in Claude API'siyle, arka planını temizlemek için fal.ai ile işlenir ve saklanmaz; fotoğrafların yalnızca cihazında durur.</p>
+<h2>Premium özellikler</h2><p>Gerçekçi görsel oluşturduğunda kombin açıklaması (ve Premium Plus'ta seçtiğin gardırop fotoğrafları) görseli üretmek için fal.ai'ye gönderilir; görsel doğrudan cihazına döner ve bizde saklanmaz. Gardıroba fotoğraf eklediğinde arka plan önce telefonunda, cihazın kendi yapay zekâsıyla temizlenir. Fotoğraf, türünü ve rengini belirlemek için Anthropic'in Claude API'siyle işlenir; telefonun arka planı temizleyemediği durumlarda (ör. eski iOS sürümleri) bu iş fal.ai ile yapılır. Fotoğraf sunucumuzda saklanmaz; fotoğrafların yalnızca cihazında durur.</p>
 <h2>Abonelikler</h2><p>Ödemeler Apple App Store veya Google Play üzerinden yapılır; kart bilgilerin bize ulaşmaz. Abonelik durumunu doğrulamak için RevenueCat kullanılır ve ona yalnızca rastgele uygulama kimliğin ile satın alma bilgisi iletilir.</p>
 <h2>Kullanım istatistikleri ve hata raporları</h2><p>Uygulamanın nasıl kullanıldığını anlamak için yalnızca olay adları (ör. “kombin oluşturuldu”) ve abonelik seviyesi günlük toplam sayılar olarak kaydedilir; kimlik, metin veya içerik kaydedilmez. Uygulama çökerse, teknik hata raporu (cihaz modeli, işletim sistemi, hata ayrıntısı) Sentry'e gönderilir; yazdığın metinler ve fotoğraflar bu rapora eklenmez.</p>
 <h2>Konum</h2><p>Hava durumu özelliği açıksa yaklaşık konumun yalnızca cihazından Open-Meteo'ya hava durumu sorgusu için kullanılır; sunucumuza gönderilmez.</p>
@@ -312,7 +316,7 @@ PRIVACY_HTML = """<!doctype html><html lang="tr"><head><meta charset="utf-8"><me
 <p>Sensea does not require an account. Your name, style preference and mood journal are stored only on your device.</p>
 <h2>Data we process</h2><p>To create a recommendation, the text you write, your style/fit/occasion choices and (if you allow it) temperature and weather conditions are sent to our server and processed with Anthropic's Claude API. Your text is not stored or logged on our server. A random per-install identifier and your IP address are used temporarily (in memory, at most 1 hour) to prevent abuse.</p>
 <h2>Reminders</h2><p>Morning reminders and weekly summary notifications are scheduled on your phone only and never pass through our server.</p>
-<h2>Premium features</h2><p>When you create a realistic image, the outfit description (and, on Premium Plus, the wardrobe photos you choose) is sent to fal.ai to generate it; the image is returned straight to your device and not stored by us. When you add a wardrobe photo, it is processed with Anthropic's Claude API to detect its type and colour and with fal.ai to remove the background, and is not stored; your photos stay on your device.</p>
+<h2>Premium features</h2><p>When you create a realistic image, the outfit description (and, on Premium Plus, the wardrobe photos you choose) is sent to fal.ai to generate it; the image is returned straight to your device and not stored by us. When you add a wardrobe photo, its background is first removed on your phone by the device's own AI. The photo is processed with Anthropic's Claude API to detect its type and colour; only when the phone can't remove the background (e.g. older iOS versions) is that done with fal.ai. Photos are not stored on our server; they stay on your device.</p>
 <h2>Subscriptions</h2><p>Payments are handled by the Apple App Store or Google Play; we never see your card details. RevenueCat is used to verify subscription status and receives only your random app identifier and purchase information.</p>
 <h2>Usage statistics and crash reports</h2><p>To understand how the app is used, only event names (e.g. “outfit created”) and subscription tier are stored as daily totals; no identifiers, text or content are recorded. If the app crashes, a technical report (device model, OS, error details) is sent to Sentry; your text and photos are never included.</p>
 <h2>Location</h2><p>If weather is on, your approximate location is used on your device only to request the weather from Open-Meteo; it is never sent to our server.</p>

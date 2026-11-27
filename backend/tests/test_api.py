@@ -515,3 +515,20 @@ def test_no_trusted_ip_header_skips_ip_cap(monkeypatch):
     codes = [client.post("/v1/recommend", json={"text": "iyiyim"}, headers={"X-Install-Id": f"nh{i}"}).status_code
              for i in range(3)]
     assert codes == [200, 200, 200]
+
+
+def test_tag_skips_server_cutout_when_phone_did_it(monkeypatch):
+    import app.main as m
+    calls = []
+
+    async def cut(*a, **k):
+        calls.append(1)
+        return "data:image/png;base64,AAAA"
+
+    monkeypatch.setattr(m.images, "remove_background", cut)
+    body = {"image_b64": _png_b64((20, 200, 30)), "locale": "tr", "remove_bg": False}
+    r = client.post("/v1/wardrobe/tag", json=body, headers={"X-Dev-Tier": "plus", "X-Install-Id": "cut2"})
+    assert r.status_code == 200 and r.json()["cutout"] is None and calls == []
+    body["remove_bg"] = True
+    r = client.post("/v1/wardrobe/tag", json=body, headers={"X-Dev-Tier": "plus", "X-Install-Id": "cut2"})
+    assert r.json()["cutout"] == "data:image/png;base64,AAAA" and calls == [1]

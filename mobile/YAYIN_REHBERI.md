@@ -40,6 +40,25 @@ npx eas-cli@latest env:create --name EXPO_PUBLIC_APP_KEY --value "RENDER'DAKI_DE
 
 Paket adı `com.alimertyasar.sensea` olarak ayarlandı. Eski `com.example.emotionapp` Play Store'da kabul edilmez. Paket adını yayından sonra değiştiremezsin, o yüzden şimdi karar ver.
 
+## 2.1 Expo Go yerine development build
+
+Expo Go yalnızca Expo'nun kendi modüllerini çalıştırır. Telefonda arka plan temizleme (`modules/sensea-cutout`), abonelikler (RevenueCat) ve bazı bildirim özellikleri **development build** ister. Bir kez kurulur, sonra Expo Go gibi kullanılır: `npx expo start` ile açtığın QR kodu bu uygulamayla okutursun. Native kod değişmedikçe yeniden build almak gerekmez.
+
+**iPhone** (Apple Developer Program üyeliği gerekir, App Store için zaten lazım):
+```powershell
+npx eas-cli@latest device:create                     # iPhone'unu kaydet (telefonda açılan profili yükle)
+npx eas-cli@latest build -p ios --profile development
+```
+Build bitince EAS'in verdiği bağlantıyı iPhone'da aç ve uygulamayı kur. iOS 16 ve üstünde Ayarlar → Gizlilik ve Güvenlik → **Geliştirici Modu**'nu açman gerekir.
+
+**Android:**
+```powershell
+npx eas-cli@latest build -p android --profile development
+```
+Çıkan APK'yı telefona kur.
+
+Sonra her zamanki gibi `npx expo start` (ya da `Sensea-Baslat.bat`) ve QR kodu development build ile okut.
+
 ## 3. Android → Google Play
 
 ```powershell
@@ -186,5 +205,6 @@ Mağaza tarafındaki adımlar:
 - [ ] `/privacy` sayfasındaki e-posta senin (`SENSEA_CONTACT_EMAIL`).
 - [ ] Android: 12 test kullanıcısı × 14 gün tamamlandı.
 - [ ] Mağaza metinleri `store/listing.md` dosyasından kopyalandı.
+- [ ] Development build'de gardıroba fotoğraf eklendi; arka plan telefonda temizlendi (iPhone iOS 17+ ve Android'de ayrı ayrı denendi).
 - [ ] Gerçek telefonda sabah hatırlatması ve haftalık özet bildirimi denendi (Expo Go'da Android'de bildirimler sınırlı; development build ile dene).
 - [ ] Ekran görüntüleri alındı. Bunun için gerçek cihazda, AI açıkken birkaç güzel örnek hazırla.

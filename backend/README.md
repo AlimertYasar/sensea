@@ -59,7 +59,7 @@ pytest -q                            # 24 test
 | POST | `/v1/recommend` | hepsi | Duygu analizi + 2 kombin. Plus'ta gardıropla (`anchor_ids` ile "bu parçayla kombin", giyilme geçmişiyle rotasyon) |
 | POST | `/v1/swap` | hepsi | Kombindeki tek parçayı değiştirir (ücretsiz günde 15, ücretli 300) |
 | POST | `/v1/render` | Premium+ | Kombinin gerçekçi fotoğrafı (`data:image/jpeg`) |
-| POST | `/v1/wardrobe/tag` | Plus | Kıyafet fotoğrafından tür, ad, renk, kalınlık + arka planı temizlenmiş PNG (`cutout`, FAL_KEY varsa) |
+| POST | `/v1/wardrobe/tag` | Plus | Kıyafet fotoğrafından tür, ad, renk, kalınlık + arka planı temizlenmiş PNG (`cutout`, FAL_KEY varsa; telefon zaten temizlediyse `remove_bg: false` ile atlanır) |
 | POST | `/v1/events` | hepsi | Anonim olay sayacı (sadece olay adı + seviye) |
 | GET | `/v1/stats` | admin | Günlük olay sayıları (`X-Admin-Key`) |
 | GET | `/privacy` | – | Mağazalar için gizlilik politikası |
@@ -84,7 +84,7 @@ Fiyatlar değişir; aşağıdakiler kabaca hesaplanmış değerler. Güncel fiya
 | Bir AI fotoğraf (FLUX.2 pro, 768×1024) | ~0,03 $ |
 | Bir gardırop etiketi | ~0,003 $ |
 | Bir parça değiştirme (Claude Haiku, kısa) | ~0,002 $ |
-| Arka plan temizleme (BiRefNet, fal.ai) | düşük; güncel fiyatı fal.ai model sayfasından kontrol et |
+| Arka plan temizleme | Çoğunlukla telefonda (ücretsiz). Yedek: fal.ai FeyNobg ~0,001 $/görsel (`SENSEA_BG_MODEL` ile değiştirilebilir) |
 
 En kötü durumda, kotasını tamamen dolduran kullanıcının aylık maliyeti:
 
