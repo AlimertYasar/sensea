@@ -3,6 +3,9 @@ import os
 os.environ.pop("ANTHROPIC_API_KEY", None)
 os.environ["SENSEA_RATE_LIMIT"] = "100000"
 os.environ["SENSEA_FREE_DAILY"] = "100000"
+os.environ["SENSEA_IP_DAILY"] = "100000"
+os.environ["SENSEA_IP_SWAPS"] = "100000"
+os.environ["SENSEA_IP_RATE_LIMIT"] = "100000"
 os.environ["SENSEA_DEV_TIERS"] = "1"
 import tempfile  # noqa: E402
 
@@ -439,3 +442,67 @@ def test_tag_has_no_cutout_without_fal_key():
     r = client.post("/v1/wardrobe/tag", json={"image_b64": _png_b64((20, 30, 200)), "locale": "en"},
                     headers={"X-Dev-Tier": "plus", "X-Install-Id": "t9"})
     assert r.status_code == 200 and r.json()["cutout"] is None
+
+
+def test_rotating_install_ids_hit_the_ip_cap(monkeypatch):
+    import app.main as m
+    monkeypatch.setitem(m.IP_FREE_DAILY, "recommend_day", 3)
+    h = lambda i: {"X-Install-Id": f"rot{i}", "True-Client-IP": "203.0.113.7"}
+    codes = [client.post("/v1/recommend", json={"text": "iyiyim"}, headers=h(i)).status_code for i in range(5)]
+    assert codes == [200, 200, 200, 429, 429]
+    # paid tiers are verified by RevenueCat, so the IP ceiling doesn't apply to them
+    r = client.post("/v1/recommend", json={"text": "iyiyim"},
+                    headers={"X-Install-Id": "rot-paid", "True-Client-IP": "203.0.113.7", "X-Dev-Tier": "premium"})
+    assert r.status_code == 200
+
+
+def test_forged_forwarded_for_is_ignored(monkeypatch):
+    import app.main as m
+    monkeypatch.setitem(m.IP_FREE_DAILY, "recommend_day", 2)
+    # X-Forwarded-For is client-controlled on Render: rotating it must not reset the per-IP cap
+    h = lambda i: {"X-Install-Id": f"fw{i}", "True-Client-IP": "198.51.100.9", "X-Forwarded-For": f"10.0.0.{i}"}
+    codes = [client.post("/v1/recommend", json={"text": "iyiyim"}, headers=h(i)).status_code for i in range(3)]
+    assert codes == [200, 200, 429]
+
+
+def test_long_wardrobe_names_are_shortened_not_rejected():
+    w = [dict(x) for x in WARDROBE]
+    w[0]["name"] = "Çok uzun bir parça adı " * 6
+    w[0]["color_name"] = "Çok uzun bir renk adı " * 3
+    r = client.post("/v1/recommend", json={"text": "iyiyim", "wardrobe": w},
+                    headers={"X-Dev-Tier": "plus", "X-Install-Id": "long1"})
+    assert r.status_code == 200, r.text
+
+
+def test_cutout_survives_a_failing_ai_tagger(monkeypatch):
+    import app.main as m
+
+    async def boom(*a, **k):
+        raise RuntimeError("api down")
+
+    async def cut(*a, **k):
+        return "data:image/png;base64,AAAA"
+
+    monkeypatch.setattr(m, "llm_enabled", lambda: True)
+    monkeypatch.setattr(m, "tag_with_llm", boom)
+    monkeypatch.setattr(m.images, "remove_background", cut)
+    r = client.post("/v1/wardrobe/tag", json={"image_b64": _png_b64((200, 30, 30)), "locale": "tr"},
+                    headers={"X-Dev-Tier": "plus", "X-Install-Id": "cut1"})
+    assert r.status_code == 200 and r.json()["cutout"] == "data:image/png;base64,AAAA"
+
+
+def test_bad_colour_from_ai_tagger_falls_back_to_photo(monkeypatch):
+    import asyncio
+    from types import SimpleNamespace
+
+    import app.llm as llm
+
+    class FakeMessages:
+        async def create(self, **kw):
+            return SimpleNamespace(content=[SimpleNamespace(type="tool_use", input={
+                "is_garment": True, "type": "jeans", "name": "Mavi jean", "color_hex": "blue", "color_name": "Mavi",
+                "warmth": "medium"})])
+
+    monkeypatch.setattr(llm, "_get_client", lambda: SimpleNamespace(messages=FakeMessages()))
+    res = asyncio.run(llm.tag_with_llm(_png_b64((20, 40, 200)), "tr"))
+    assert res.type == "jeans" and res.color_hex.startswith("#") and len(res.color_hex) == 7

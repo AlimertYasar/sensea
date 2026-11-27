@@ -48,7 +48,7 @@ export function useGenerate() {
           locale,
           ...(weather ? { weather } : {}),
           prefs: buildPrefs(entries, profile),
-          ...(sendWardrobe ? { wardrobe: wardrobePayload(wardrobe, entries) } : {}),
+          ...(sendWardrobe ? { wardrobe: wardrobePayload(wardrobe, entries, anchors) } : {}),
           ...(anchors.length ? { anchor_ids: anchors } : {}),
         },
         installId,
@@ -75,7 +75,6 @@ export function useGenerate() {
         code === 'network' ? t.errNetwork
         : code === 'rate' ? t.errRate
         : code === 'daily' ? t.errDaily
-        : code === 'invalid' ? t.emptyText
         : t.errGeneric,
       );
       return null;

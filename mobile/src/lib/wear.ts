@@ -40,18 +40,28 @@ export function forgotten(wardrobe: WardrobeItem[], stats: Record<string, WearSt
     .sort((a, b) => (stats[a.id]?.lastWornAt ?? a.createdAt) - (stats[b.id]?.lastWornAt ?? b.createdAt));
 }
 
-/** Wardrobe as the API expects it, including wear history so the AI rotates pieces. */
-export function wardrobePayload(wardrobe: WardrobeItem[], entries: Entry[]): WardrobePayload[] {
+/** The API accepts at most this many pieces per request. */
+export const MAX_WARDROBE_SENT = 250;
+
+/**
+ * Wardrobe as the API expects it, including wear history so the AI rotates pieces.
+ * Big wardrobes are trimmed to MAX_WARDROBE_SENT: anchored pieces first, then the ones
+ * not worn for the longest time (never worn counts as longest), so rotation still works.
+ */
+export function wardrobePayload(wardrobe: WardrobeItem[], entries: Entry[], keep: string[] = []): WardrobePayload[] {
   const stats = wearStats(entries);
-  return wardrobe.map(({ id, slot, type, name, color_hex, color_name, warmth }) => ({
+  const all = wardrobe.map(({ id, slot, type, name, color_hex, color_name, warmth }) => ({
     id,
     slot,
     type,
-    name,
+    name: name.slice(0, 60),
     color_hex,
-    color_name,
+    color_name: (color_name || '').slice(0, 30),
     warmth,
     days_since_worn: daysSince(stats[id]?.lastWornAt ?? null),
     wear_count: stats[id]?.count ?? 0,
   }));
+  if (all.length <= MAX_WARDROBE_SENT) return all;
+  const rank = (w: WardrobePayload) => (keep.includes(w.id) ? Infinity : (w.days_since_worn ?? 1e6));
+  return [...all].sort((a, b) => rank(b) - rank(a)).slice(0, MAX_WARDROBE_SENT);
 }
