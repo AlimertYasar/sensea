@@ -32,18 +32,25 @@ class Weather(BaseModel):
     condition: Condition = "clear"
 
 
+def _clip_to(n: int):
+    """Validator that shortens text instead of failing: one long name must not block a whole request."""
+    return classmethod(lambda cls, v: (str(v or "").strip()[:n]))
+
+
 class WardrobeItem(BaseModel):
     id: str = Field(min_length=1, max_length=40)
     slot: Slot
     type: str = Field(max_length=20)
-    name: str = Field(max_length=60)
+    name: str
     color_hex: str
-    color_name: str = Field(default="", max_length=30)
+    color_name: str = ""
     warmth: Warmth = "medium"
     days_since_worn: Optional[int] = Field(default=None, ge=0, le=3650)  # None = never worn
     wear_count: int = Field(default=0, ge=0, le=100000)
 
     _hex = field_validator("color_hex")(classmethod(lambda cls, v: _norm_hex(v)))
+    _name = field_validator("name", mode="before")(_clip_to(60))
+    _cname = field_validator("color_name", mode="before")(_clip_to(30))
 
 
 ColorFamily = Literal["black", "white", "grey", "beige", "brown", "navy", "red", "orange", "yellow", "green", "blue", "purple", "pink"]

@@ -147,7 +147,9 @@ export default function Result() {
           locale,
           ...(entry.weather ? { weather: entry.weather } : {}),
           prefs: buildPrefs(entries, profile),
-          ...(useMine ? { wardrobe: wardrobePayload(w, entries) } : {}),
+          ...(useMine
+            ? { wardrobe: wardrobePayload(w, entries, outfit.items.flatMap((i) => (i.wardrobe_id ? [i.wardrobe_id] : []))) }
+            : {}),
           seed: Math.floor(Math.random() * 1e6),
         },
         installId,

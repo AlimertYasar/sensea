@@ -107,3 +107,7 @@ Girmen gereken ortam değişkenleri:
 - `SENSEA_CONTACT_EMAIL`
 
 **Yayında `SENSEA_DEV_TIERS` asla `1` olmamalı.**
+
+`SENSEA_APP_KEY` Render'da otomatik üretilir; aynı değer uygulamaya `EXPO_PUBLIC_APP_KEY` olarak verilmezse sunucu her isteği 401 ile reddeder (bkz. `mobile/YAYIN_REHBERI.md`).
+
+**Kötüye kullanım koruması:** Cihaz kimliğini uygulama ürettiği için bir script her istekte yeni kimlik gönderebilir. Bu yüzden ücretsiz kotanın üstünde IP başına günlük bir tavan da var (`SENSEA_IP_DAILY`, `SENSEA_IP_SWAPS`). IP, Cloudflare'in `True-Client-IP` başlığından okunur; `X-Forwarded-For` istemci tarafından uydurulabildiği için kullanılmaz. Yine de Anthropic ve fal.ai panellerinde aylık harcama limiti koy.

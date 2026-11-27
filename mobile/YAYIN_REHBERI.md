@@ -28,7 +28,15 @@ npx eas-cli@latest login
 npx eas-cli@latest init          # app.json'a projectId ekler
 ```
 
-`eas.json` içindeki `EXPO_PUBLIC_API_URL` değerlerini (iki tane var) kendi API adresinle değiştir. Backend'de `SENSEA_APP_KEY` kullanıyorsan aynı değeri `EXPO_PUBLIC_APP_KEY` olarak ekle.
+`eas.json` içindeki `EXPO_PUBLIC_API_URL` değerlerini (iki tane var) kendi API adresinle değiştir.
+
+**Uygulama anahtarı (zorunlu):** `render.yaml` sunucuda `SENSEA_APP_KEY` değerini otomatik üretir ve sunucu bu anahtarı taşımayan her isteği reddeder (401). Render panelinde servisin **Environment** sekmesinden değeri kopyala ve EAS'e kaydet; anahtar repoya hiç girmez:
+
+```powershell
+npx eas-cli@latest env:create --name EXPO_PUBLIC_APP_KEY --value "RENDER'DAKI_DEGER" --environment preview --environment production --visibility sensitive
+```
+
+`eas.json`'daki `"environment": "production"` / `"preview"` satırları derlemenin bu değeri almasını sağlar. Yerel geliştirmede aynı değeri `mobile/.env` içine `EXPO_PUBLIC_APP_KEY=` olarak yazman yeterli.
 
 Paket adı `com.alimertyasar.sensea` olarak ayarlandı. Eski `com.example.emotionapp` Play Store'da kabul edilmez. Paket adını yayından sonra değiştiremezsin, o yüzden şimdi karar ver.
 

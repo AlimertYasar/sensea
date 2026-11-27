@@ -27,6 +27,18 @@ logging.basicConfig(level=logging.INFO)
 APP_KEY = os.getenv("SENSEA_APP_KEY", "")
 BURST_LIMIT = int(os.getenv("SENSEA_RATE_LIMIT", "30"))  # any request type, per client per window
 BURST_WINDOW_S = int(os.getenv("SENSEA_RATE_WINDOW", "600"))
+IP_BURST_LIMIT = int(os.getenv("SENSEA_IP_RATE_LIMIT", str(BURST_LIMIT * 4)))  # several phones can share one IP
+# Daily caps per IP for the free tier. The install id is chosen by the app, so a script could send a new one
+# on every request; this stops it from turning the free quota into unlimited Claude calls.
+IP_FREE_DAILY = {
+    "recommend_day": int(os.getenv("SENSEA_IP_DAILY", "40")),
+    "swap_day": int(os.getenv("SENSEA_IP_SWAPS", "120")),
+}
+# Where the real client address comes from. Render sits behind Cloudflare, which sets True-Client-IP
+# (clients cannot forge it). X-Forwarded-For is only appended to by Render, so its first entries can be
+# forged and its last one is Cloudflare's address; it is used only if SENSEA_PROXY_HOPS is set.
+CLIENT_IP_HEADER = os.getenv("SENSEA_CLIENT_IP_HEADER", "true-client-ip").lower()
+TRUSTED_HOPS = int(os.getenv("SENSEA_PROXY_HOPS", "0"))
 
 app = FastAPI(title="Sensea API", version="2.1.0")
 app.add_middleware(
@@ -47,24 +59,66 @@ def usage() -> Usage:
     return _usage
 
 
-def _burst(client_id: str) -> None:
+_last_sweep = 0.0
+
+
+def _sweep(now: float) -> None:
+    """Forget clients with no request in the window, so the table can't grow without bound."""
+    global _last_sweep
+    if now - _last_sweep < 60:
+        return
+    _last_sweep = now
+    for k in [k for k, q in _hits.items() if not q or now - q[-1] > BURST_WINDOW_S]:
+        del _hits[k]
+
+
+def _burst(client_id: str, limit: int | None = None) -> None:
     now = time.monotonic()
+    _sweep(now)
     q = _hits[client_id]
     while q and now - q[0] > BURST_WINDOW_S:
         q.popleft()
-    if len(q) >= BURST_LIMIT:
+    if len(q) >= (limit or BURST_LIMIT):
         raise HTTPException(status_code=429, detail="RATE_LIMITED")
     q.append(now)
+
+
+def client_ip(request: Request) -> str:
+    direct = request.headers.get(CLIENT_IP_HEADER, "").strip() if CLIENT_IP_HEADER else ""
+    if direct:
+        return direct[:64]
+    fwd = [p.strip() for p in request.headers.get("x-forwarded-for", "").split(",") if p.strip()]
+    if TRUSTED_HOPS > 0 and fwd:
+        return fwd[-min(TRUSTED_HOPS, len(fwd))]
+    return request.client.host if request.client else "?"
+
+
+def _take_daily(user: str, ip: str, tier: str, kind: str) -> bool:
+    """Consume one unit of a daily quota: per install, plus a per-IP ceiling on the free tier."""
+    if not usage().take(user, kind, LIMITS[tier][kind]):
+        return False
+    if tier == "free" and kind in IP_FREE_DAILY and not usage().take(f"ip:{ip}", kind, IP_FREE_DAILY[kind]):
+        usage().give_back(user, kind)
+        return False
+    return True
+
+
+def _give_back_daily(user: str, ip: str, tier: str, kind: str) -> None:
+    usage().give_back(user, kind)
+    if tier == "free" and kind in IP_FREE_DAILY:
+        usage().give_back(f"ip:{ip}", kind)
 
 
 async def _context(request: Request, x_sensea_key: str | None, x_install_id: str | None, x_dev_tier: str | None):
     if APP_KEY and x_sensea_key != APP_KEY:
         raise HTTPException(status_code=401, detail="UNAUTHORIZED")
-    ip = request.headers.get("x-forwarded-for", request.client.host if request.client else "?").split(",")[0]
+    ip = client_ip(request)
     user = (x_install_id or "").strip()[:64] or f"ip:{ip}"
-    _burst(user)
+    _burst(f"ip:{ip}", IP_BURST_LIMIT)
+    if user != f"ip:{ip}":
+        _burst(user)
     tier = await resolve_tier(x_install_id, x_dev_tier)
-    return user, tier
+    return user, tier, ip
 
 
 @app.get("/health")
@@ -80,7 +134,7 @@ def health():
 @app.get("/v1/me", response_model=MeResponse)
 async def me(request: Request, x_sensea_key: str | None = Header(default=None),
              x_install_id: str | None = Header(default=None), x_dev_tier: str | None = Header(default=None)):
-    user, tier = await _context(request, x_sensea_key, x_install_id, x_dev_tier)
+    user, tier, _ = await _context(request, x_sensea_key, x_install_id, x_dev_tier)
     lim = LIMITS[tier]
     u = usage()
     return MeResponse(
@@ -94,8 +148,8 @@ async def me(request: Request, x_sensea_key: str | None = Header(default=None),
 @app.post("/v1/recommend", response_model=Recommendation)
 async def recommend(req: RecommendRequest, request: Request, x_sensea_key: str | None = Header(default=None),
                     x_install_id: str | None = Header(default=None), x_dev_tier: str | None = Header(default=None)):
-    user, tier = await _context(request, x_sensea_key, x_install_id, x_dev_tier)
-    if not usage().take(user, "recommend_day", LIMITS[tier]["recommend_day"]):
+    user, tier, ip = await _context(request, x_sensea_key, x_install_id, x_dev_tier)
+    if not _take_daily(user, ip, tier, "recommend_day"):
         raise HTTPException(status_code=429, detail="DAILY_LIMIT")
     if tier != "plus":
         req.wardrobe = None  # wardrobe outfits are a Premium Plus feature
@@ -121,10 +175,10 @@ async def recommend(req: RecommendRequest, request: Request, x_sensea_key: str |
 async def swap(req: SwapRequest, request: Request, x_sensea_key: str | None = Header(default=None),
                x_install_id: str | None = Header(default=None), x_dev_tier: str | None = Header(default=None)):
     """Replace one piece of an outfit, keeping the rest."""
-    user, tier = await _context(request, x_sensea_key, x_install_id, x_dev_tier)
+    user, tier, ip = await _context(request, x_sensea_key, x_install_id, x_dev_tier)
     if req.index >= len(req.outfit.items):
         raise HTTPException(status_code=422, detail="BAD_INDEX")
-    if not usage().take(user, "swap_day", LIMITS[tier]["swap_day"]):
+    if not _take_daily(user, ip, tier, "swap_day"):
         raise HTTPException(status_code=429, detail="SWAP_LIMIT")
     if tier != "plus":
         req.wardrobe = None
@@ -140,7 +194,7 @@ async def swap(req: SwapRequest, request: Request, x_sensea_key: str | None = He
         req.seed += attempt
         item = validate_swap(swap_fallback(req), req)
     if not item:
-        usage().give_back(user, "swap_day")
+        _give_back_daily(user, ip, tier, "swap_day")
         raise HTTPException(status_code=422, detail="NO_ALTERNATIVE")
     return SwapResponse(item=item)
 
@@ -148,7 +202,7 @@ async def swap(req: SwapRequest, request: Request, x_sensea_key: str | None = He
 @app.post("/v1/render", response_model=RenderResponse)
 async def render(req: RenderRequest, request: Request, x_sensea_key: str | None = Header(default=None),
                  x_install_id: str | None = Header(default=None), x_dev_tier: str | None = Header(default=None)):
-    user, tier = await _context(request, x_sensea_key, x_install_id, x_dev_tier)
+    user, tier, _ = await _context(request, x_sensea_key, x_install_id, x_dev_tier)
     if tier == "free":
         raise HTTPException(status_code=402, detail="PREMIUM_REQUIRED")
     limit = LIMITS[tier]["render_month"]
@@ -167,30 +221,35 @@ async def render(req: RenderRequest, request: Request, x_sensea_key: str | None 
 @app.post("/v1/wardrobe/tag", response_model=TagResponse)
 async def tag(req: TagRequest, request: Request, x_sensea_key: str | None = Header(default=None),
               x_install_id: str | None = Header(default=None), x_dev_tier: str | None = Header(default=None)):
-    user, tier = await _context(request, x_sensea_key, x_install_id, x_dev_tier)
+    user, tier, _ = await _context(request, x_sensea_key, x_install_id, x_dev_tier)
     if tier != "plus":
         raise HTTPException(status_code=402, detail="PLUS_REQUIRED")
     if not usage().take(user, "tag_month", LIMITS[tier]["tag_month"]):
         raise HTTPException(status_code=429, detail="TAG_LIMIT")
-    try:
-        if llm_enabled():
-            res, cutout = await asyncio.gather(tag_with_llm(req.image_b64, req.locale), images.remove_background(req.image_b64))
+    # Background removal runs alongside tagging and is kept even if the AI tagger fails.
+    cut_task = asyncio.create_task(images.remove_background(req.image_b64))
+    res: TagResponse | None = None
+    if llm_enabled():
+        try:
+            res = await tag_with_llm(req.image_b64, req.locale)
             if res is None:
+                cut_task.cancel()
                 usage().give_back(user, "tag_month")
                 raise HTTPException(status_code=422, detail="NOT_A_GARMENT")
-        else:
-            res, cutout = images.tag_locally(req.image_b64, req.locale), await images.remove_background(req.image_b64)
-        res.cutout = cutout
-        return res
-    except HTTPException:
-        raise
-    except Exception as exc:
-        log.warning("tagging failed: %s", type(exc).__name__)
+        except HTTPException:
+            raise
+        except Exception as exc:
+            log.warning("tagging failed: %s", type(exc).__name__)
+            res = None
+    if res is None:
         try:
-            return images.tag_locally(req.image_b64, req.locale)
-        except Exception:
+            res = images.tag_locally(req.image_b64, req.locale)
+        except Exception as exc:
+            cut_task.cancel()
             usage().give_back(user, "tag_month")
             raise HTTPException(status_code=422, detail="BAD_IMAGE") from exc
+    res.cutout = await cut_task
+    return res
 
 
 EVENTS = {
@@ -209,7 +268,7 @@ class EventIn(BaseModel):
 async def event(ev: EventIn, request: Request, x_sensea_key: str | None = Header(default=None),
                 x_install_id: str | None = Header(default=None), x_dev_tier: str | None = Header(default=None)):
     """Anonymous counter. Only the event name and the subscription tier are recorded."""
-    _, tier = await _context(request, x_sensea_key, x_install_id, x_dev_tier)
+    _, tier, _ = await _context(request, x_sensea_key, x_install_id, x_dev_tier)
     if ev.name in EVENTS:
         usage().count_event(ev.name, tier)
 

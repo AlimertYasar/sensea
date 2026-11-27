@@ -11,7 +11,9 @@ from anthropic import AsyncAnthropic
 
 from .catalog import EMOTIONS, GARMENTS, OCCASIONS, SLOTS, STYLE_BRIEFS
 from .color_science import PAD, in_tune_palette, lift_palette
-from .postprocess import finalize
+from .color_science import name_for
+from .images import tag_locally
+from .postprocess import _hex, finalize
 from .schemas import Recommendation, RecommendRequest, TagResponse
 
 MODEL = os.getenv("SENSEA_MODEL", "claude-haiku-5-5")
@@ -228,8 +230,14 @@ async def tag_with_llm(image_b64: str, locale: str) -> TagResponse | None:
     if not r.get("is_garment", True):
         return None
     gtype = r.get("type") if r.get("type") in GARMENTS else "tshirt"
-    return TagResponse(slot=GARMENTS[gtype], type=gtype, name=str(r.get("name", ""))[:48], color_hex=r.get("color_hex", "#808080"),
-                       color_name=str(r.get("color_name", ""))[:24], warmth=r.get("warmth", "medium"))
+    hx = _hex(r.get("color_hex"))
+    cname = str(r.get("color_name", ""))[:24]
+    if hx is None:  # unusable colour from the model: measure it from the photo instead
+        local = tag_locally(image_b64, locale)
+        hx, cname = local.color_hex, local.color_name
+    warmth = r.get("warmth") if r.get("warmth") in ("light", "medium", "warm") else "medium"
+    return TagResponse(slot=GARMENTS[gtype], type=gtype, name=str(r.get("name", ""))[:48] or cname, color_hex=hx,
+                       color_name=cname or name_for(hx, locale), warmth=warmth)
 
 
 # ---------------------------------------------------------------- swap a single piece
