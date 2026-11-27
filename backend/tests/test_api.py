@@ -506,3 +506,12 @@ def test_bad_colour_from_ai_tagger_falls_back_to_photo(monkeypatch):
     monkeypatch.setattr(llm, "_get_client", lambda: SimpleNamespace(messages=FakeMessages()))
     res = asyncio.run(llm.tag_with_llm(_png_b64((20, 40, 200)), "tr"))
     assert res.type == "jeans" and res.color_hex.startswith("#") and len(res.color_hex) == 7
+
+
+def test_no_trusted_ip_header_skips_ip_cap(monkeypatch):
+    # without True-Client-IP every request would look like Render's proxy: don't lump users together
+    import app.main as m
+    monkeypatch.setitem(m.IP_FREE_DAILY, "recommend_day", 1)
+    codes = [client.post("/v1/recommend", json={"text": "iyiyim"}, headers={"X-Install-Id": f"nh{i}"}).status_code
+             for i in range(3)]
+    assert codes == [200, 200, 200]

@@ -39,6 +39,7 @@ IP_FREE_DAILY = {
 # forged and its last one is Cloudflare's address; it is used only if SENSEA_PROXY_HOPS is set.
 CLIENT_IP_HEADER = os.getenv("SENSEA_CLIENT_IP_HEADER", "true-client-ip").lower()
 TRUSTED_HOPS = int(os.getenv("SENSEA_PROXY_HOPS", "0"))
+TRUST_SOCKET_IP = os.getenv("SENSEA_TRUST_SOCKET_IP", "") == "1"
 
 app = FastAPI(title="Sensea API", version="2.1.0")
 app.add_middleware(
@@ -83,29 +84,41 @@ def _burst(client_id: str, limit: int | None = None) -> None:
     q.append(now)
 
 
-def client_ip(request: Request) -> str:
+def client_ip(request: Request) -> str | None:
+    """The caller's real address, or None if it can't be known reliably.
+
+    Behind Render the socket address is Render's own proxy, shared by every user, so without the
+    trusted header we return None and skip per-IP limits rather than lump everyone together.
+    SENSEA_TRUST_SOCKET_IP=1 uses the socket address (only when clients connect directly).
+    """
     direct = request.headers.get(CLIENT_IP_HEADER, "").strip() if CLIENT_IP_HEADER else ""
     if direct:
         return direct[:64]
     fwd = [p.strip() for p in request.headers.get("x-forwarded-for", "").split(",") if p.strip()]
     if TRUSTED_HOPS > 0 and fwd:
         return fwd[-min(TRUSTED_HOPS, len(fwd))]
-    return request.client.host if request.client else "?"
+    if TRUST_SOCKET_IP and request.client:
+        return request.client.host
+    return None
 
 
-def _take_daily(user: str, ip: str, tier: str, kind: str) -> bool:
+def _ip_capped(ip: str | None, tier: str, kind: str) -> bool:
+    return bool(ip) and tier == "free" and kind in IP_FREE_DAILY
+
+
+def _take_daily(user: str, ip: str | None, tier: str, kind: str) -> bool:
     """Consume one unit of a daily quota: per install, plus a per-IP ceiling on the free tier."""
     if not usage().take(user, kind, LIMITS[tier][kind]):
         return False
-    if tier == "free" and kind in IP_FREE_DAILY and not usage().take(f"ip:{ip}", kind, IP_FREE_DAILY[kind]):
+    if _ip_capped(ip, tier, kind) and not usage().take(f"ip:{ip}", kind, IP_FREE_DAILY[kind]):
         usage().give_back(user, kind)
         return False
     return True
 
 
-def _give_back_daily(user: str, ip: str, tier: str, kind: str) -> None:
+def _give_back_daily(user: str, ip: str | None, tier: str, kind: str) -> None:
     usage().give_back(user, kind)
-    if tier == "free" and kind in IP_FREE_DAILY:
+    if _ip_capped(ip, tier, kind):
         usage().give_back(f"ip:{ip}", kind)
 
 
@@ -113,8 +126,9 @@ async def _context(request: Request, x_sensea_key: str | None, x_install_id: str
     if APP_KEY and x_sensea_key != APP_KEY:
         raise HTTPException(status_code=401, detail="UNAUTHORIZED")
     ip = client_ip(request)
-    user = (x_install_id or "").strip()[:64] or f"ip:{ip}"
-    _burst(f"ip:{ip}", IP_BURST_LIMIT)
+    user = (x_install_id or "").strip()[:64] or (f"ip:{ip}" if ip else "anon")
+    if ip:
+        _burst(f"ip:{ip}", IP_BURST_LIMIT)
     if user != f"ip:{ip}":
         _burst(user)
     tier = await resolve_tier(x_install_id, x_dev_tier)
